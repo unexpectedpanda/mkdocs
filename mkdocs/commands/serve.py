@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os.path
 import shutil
 import tempfile
 from os.path import isdir, isfile, join
@@ -10,6 +11,7 @@ from urllib.parse import urlsplit
 from mkdocs.commands.build import build
 from mkdocs.config import load_config
 from mkdocs.livereload import LiveReloadServer, _serve_url
+from mkdocs.structure.files import Files
 
 if TYPE_CHECKING:
     from mkdocs.config.defaults import MkDocsConfig
@@ -35,6 +37,8 @@ def serve(
     whenever a file is edited.
     """
     # Create a temporary build directory, and set some options to serve it
+    # PY2 returns a byte string by default. The Unicode prefix ensures a Unicode
+    # string is returned. And it makes MkDocs temp dirs easier to identify.
     site_dir = tempfile.mkdtemp(prefix='mkdocs_')
 
     def get_config():
@@ -56,22 +60,42 @@ def serve(
     mount_path = urlsplit(config.site_url or '/').path
     config.site_url = serve_url = _serve_url(host, port, mount_path)
 
+    files: Files = Files(())
+
     def builder(config: MkDocsConfig | None = None):
         log.info("Building documentation...")
         if config is None:
             config = get_config()
             config.site_url = serve_url
 
-        build(config, serve_url=None if is_clean else serve_url, dirty=is_dirty, is_serve=True)
+        nonlocal files
+        files = build(config, serve_url=None if is_clean else serve_url, dirty=is_dirty)
+
+    def file_hook(path: str) -> str | None:
+        f = files.get_file_from_path(path)
+        if f is not None and f.is_copyless_static_file:
+            return f.abs_src_path
+        return None
+
+    def get_file(path: str) -> str | None:
+        if new_path := file_hook(path):
+            return os.path.join(site_dir, new_path)
+        if os.path.isfile(try_path := os.path.join(site_dir, path)):
+            return try_path
+        return None
 
     server = LiveReloadServer(
-        builder=builder, host=host, port=port, root=site_dir, mount_path=mount_path
+        builder=builder,
+        host=host,
+        port=port,
+        root=site_dir,
+        file_hook=file_hook,
+        mount_path=mount_path,
     )
 
     def error_handler(code) -> bytes | None:
         if code in (404, 500):
-            error_page = join(site_dir, f'{code}.html')
-            if isfile(error_page):
+            if error_page := get_file(f'{code}.html'):
                 with open(error_page, 'rb') as f:
                     return f.read()
         return None
@@ -106,5 +130,5 @@ def serve(
             server.shutdown()
     finally:
         config.plugins.on_shutdown()
-        if isdir(site_dir):
+        if os.path.isdir(site_dir):
             shutil.rmtree(site_dir)

@@ -5,11 +5,10 @@ import fnmatch
 import logging
 import os
 import posixpath
-import re
 import shutil
 import warnings
 from functools import cached_property
-from pathlib import Path, PurePath, PurePosixPath
+from pathlib import PurePath, PurePosixPath
 from typing import TYPE_CHECKING, Callable, Iterable, Iterator, Mapping, Sequence, overload
 from urllib.parse import quote as urlquote
 
@@ -113,68 +112,14 @@ class Files:
 
     def copy_static_files(
         self,
-        binary_dirs: list[str] | None,
-        site_dir: str,
-        docs_dir: str,
-        use_directory_urls: bool = False,
         dirty: bool = False,
-        is_serve: bool = False,
         *,
         inclusion: Callable[[InclusionLevel], bool] = InclusionLevel.is_included,
     ) -> None:
-        """Copy static files from source to destination."""
+        """Soft-deprecated, do not use."""
         for file in self:
             if not file.is_documentation_page() and inclusion(file.inclusion):
-                file.copy_file(binary_dirs, docs_dir, dirty, is_serve)
-
-        # Create symbolic links to absolute dirs specified in the binary_dirs key,
-        # or copy their files if it's a build
-        if binary_dirs:
-            match = [re.search('^(?:/|~/|[A-Za-z]+:).*', x) for x in binary_dirs]
-
-            if any(match):
-                found_dirs = [x for x in match if x is not None]
-
-                for found_dir in found_dirs:
-                    found_dir_str = found_dir.group()
-
-                    # Get the last subdir name
-                    last_subdir = Path(found_dir_str).parts[-1]
-
-                    dir_source = Path(found_dir_str).expanduser()
-
-                    if is_serve:
-                        # Make a symbolic link to the directory
-                        dir_dest = Path(site_dir).joinpath(last_subdir)
-
-                        if not Path(dir_dest).exists():
-                            utils.create_symbolic_dir(dir_source, dir_dest)
-                    else:
-                        # Copy files
-                        if Path(dir_source).is_dir():
-                            log.info(f'Copying files from {dir_source!s} binary directory')
-                            for binary_dir_file in Path(dir_source).glob('**/*'):
-                                if not binary_dir_file.is_dir():
-                                    relative_binary_dir_file = (
-                                        str(binary_dir_file)
-                                        .replace(str(dir_source), '')
-                                        .strip('\\')
-                                        .strip('/')
-                                    )
-                                    binary_dest_dir = str(Path(site_dir).joinpath(dir_source.name))
-
-                                    binary_dir_file_obj = File(
-                                        relative_binary_dir_file,
-                                        str(dir_source),
-                                        binary_dest_dir,
-                                        use_directory_urls,
-                                    )
-
-                                    binary_dir_file_obj.copy_file([], docs_dir, dirty, is_serve)
-                        else:
-                            log.error(
-                                f'Can\'t copy files from binary directory {dir_source!s}, as it doesn\'t exist'
-                            )
+                file.copy_file(dirty)
 
     def documentation_pages(
         self, *, inclusion: Callable[[InclusionLevel], bool] = InclusionLevel.is_included
@@ -525,13 +470,11 @@ class File:
         self._content = value
         self.abs_src_path = None
 
-    def copy_file(
-        self,
-        binary_dirs: list[str] | None = [],
-        docs_dir: str = '',
-        dirty: bool = False,
-        is_serve: bool = False,
-    ) -> None:
+    @utils.weak_property
+    def is_copyless_static_file(self) -> bool:
+        return self.abs_src_path is not None and self.dest_uri == self.src_uri
+
+    def copy_file(self, dirty: bool = False) -> None:
         """Copy source file to destination, ensuring parent directories exist."""
         if dirty and not self.is_modified():
             log.debug(f"Skip copying unmodified file: '{self.src_uri}'")
@@ -543,9 +486,7 @@ class File:
         if content is None:
             assert self.abs_src_path is not None
             try:
-                utils.copy_file(
-                    self.abs_src_path, self.abs_dest_path, binary_dirs, docs_dir, is_serve
-                )
+                utils.copy_file(self.abs_src_path, output_path)
             except shutil.SameFileError:
                 pass  # Let plugins write directly into site_dir.
         elif isinstance(content, str):
