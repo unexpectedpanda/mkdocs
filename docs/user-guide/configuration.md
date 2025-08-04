@@ -10,7 +10,7 @@ Project settings are configured by default using a YAML configuration file in
 the project directory named `mkdocs.yml`. You can specify another path for it
 by using the `-f`/`--config-file` option (see `mkdocs build --help`).
 
-As a minimum, this configuration file must contain the `site_name`. All other settings are optional.
+At a minimum, this configuration file must contain the `site_name`. All other settings are optional.
 
 ## Project information
 
@@ -312,10 +312,17 @@ Example:
 
 ```yaml
 exclude_docs: |
-  api-config.json    # A file with this name anywhere.
-  /requirements.txt  # Top-level "docs/requirements.txt".
-  *.py               # Any file with this extension anywhere.
-  !/foo/example.py   # But keep this particular file.
+  # A file with this name anywhere.
+  api-config.json
+
+  # Top-level "docs/requirements.txt".
+  /requirements.txt
+
+  # Any file with this extension anywhere.
+  *.py
+
+  # But keep this particular file.
+  !/foo/example.py
 ```
 
 This follows the [.gitignore pattern format](https://git-scm.com/docs/gitignore#_pattern_format).
@@ -336,7 +343,8 @@ Otherwise you could for example opt only certain dot-files back into the site:
 
 ```yaml
 exclude_docs: |
-  !.assets  # Don't exclude '.assets' although all other '.*' are excluded
+  # Don't exclude '.assets' although all other '.*' are excluded
+  !.assets
 ```
 
 ### draft_docs
@@ -352,9 +360,14 @@ Example:
 
 ```yaml
 draft_docs: |
-  drafts/               # A "drafts" directory anywhere.
-  _unpublished.md       # A md file ending in _unpublished.md
-  !/foo_unpublished.md  # But keep this particular file.
+  # A "drafts" directory anywhere.
+  drafts/
+
+  # A Markdown file ending in _unpublished.md anywhere.
+  *_unpublished.md
+
+  # But keep this particular file.
+  !/foo_unpublished.md
 ```
 
 This follows the [.gitignore pattern format](https://git-scm.com/docs/gitignore#_pattern_format).
@@ -797,25 +810,40 @@ Allows a custom default to be set without the need to pass it through the
 
 ### use_directory_urls
 
-This setting controls the style used for linking to pages within the
-documentation.
+This setting controls the directory structure of the generated documentation, and thereby the URL format used for linking to pages.
 
-The following table demonstrates how the URLs used on the site differ when
+The following tables demonstrate how the directory structure and URLs used on the site differ when
 setting `use_directory_urls` to `true` or `false`.
 
-Source file      | use_directory_urls: true  | use_directory_urls: false
----------------- | ------------------------- | -------------------------
-index.md         | /                         | /index.html
-api-guide.md     | /api-guide/               | /api-guide.html
-about/license.md | /about/license/           | /about/license.html
+**`use_directory_urls: false`**
+
+This setting is needed when the documentation is hosted on systems that can't
+access the file `X/index.html` when given the URL `X`. When set to `false`,
+no additional `X` directory is created, and the file is simply stored as `X.html`.
+Links are created that point directly to the target *file* rather than a target
+*directory*.
+
+Source file      | Generated File     | URL Format
+---------------- | ------------------ | -------------------
+index.md         | index.html         | /index.html
+api-guide.md     | api-guide.html     | /api-guide.html
+about/license.md | about/license.html | /about/license.html
+
+For example, this needs to be set to `false` when:
+
+* opening pages directly from the file system
+* publishing the documentation to a static S3 website.
+
+**`use_directory_urls: true`**
 
 The default style of `use_directory_urls: true` creates more user friendly URLs,
 and is usually what you'll want to use.
 
-The alternate style can be useful if you want your documentation to remain
-properly linked when opening pages directly from the file system, because it
-creates links that point directly to the target *file* rather than the target
-*directory*.
+Source file      | Generated File            | URL Format
+---------------- | ------------------------- | --------------
+index.md         | /index.html               | /
+api-guide.md     | /api-guide/index.html     | /api-guide/
+about/license.md | /about/license/index.html | /about/license
 
 **default**: `true`
 
@@ -944,8 +972,7 @@ hooks:
   - my_hooks.py
 ```
 
-Then the file *my_hooks.py* can contain any [plugin event handlers](../dev-guide/plugins.md#events)
-(without `self`), e.g.:
+Then the file `my_hooks.py` can contain any [plugin event handlers](../dev-guide/plugins.md#events) (without `self`), e.g.:
 
 ```python
 def on_page_markdown(markdown, **kwargs):
@@ -988,6 +1015,12 @@ If using standard method names, it can be directly replaced, e.g.:
 +hooks:
 +  - my_hooks.py
 ```
+
+> NEW: **New in MkDocs 1.6.**
+>
+> If a hook file has a file `foo.py` adjacent to it, it can use the normal Python syntax `import foo` to access its functions.
+>
+> In older versions of MkDocs, a workaround was necessary to make this work - adding the path to `sys.path`.
 
 ### plugins
 
